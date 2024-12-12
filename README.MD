@@ -1,0 +1,403 @@
+# Express API Project
+
+This project is a RESTful API built with Node.js, Express, and Sequelize. The API includes user authentication and authorization, as well as CRUD operations for spots and associated resources like reviews and bookings.
+
+---
+
+## **Table of Contents**
+- [Database Schema Design](#database-schema-design)
+- [API Documentation](#api-documentation)
+  - [User Authentication/Authorization](#user-authenticationauthorization)
+  - [Spots](#spots)
+- [Setup and Installation](#setup-and-installation)
+- [Usage](#usage)
+- [Contributing](#contributing)
+- [License](#license)
+
+---
+
+## **Database Schema Design**
+
+![Database Schema](./images/db-schema.png)
+
+---
+
+## **API Documentation**
+
+### **User Authentication/Authorization**
+
+#### **General**
+
+**Require Authentication**
+
+- **Status Code:** `401`
+- **Headers:**
+  ```json
+  {
+    "Content-Type": "application/json"
+  }
+Response Body:
+
+```json
+{
+  "message": "Authentication required"
+}
+```
+
+Require Proper Authorization
+
+Status Code: 403
+Headers:
+
+```json
+{
+  "Content-Type": "application/json"
+}
+```
+
+Response Body:
+
+```json
+{
+  "message": "Forbidden"
+}
+```
+
+Get the Current User
+Returns information about the currently logged-in user.
+
+Require Authentication: false
+Method: GET
+Route Path: /api/session
+Request Body: None
+Successful Response
+
+When there is a logged-in user:
+
+```json
+{
+  "user": {
+    "id": 1,
+    "firstName": "John",
+    "lastName": "Smith",
+    "email": "john.smith@gmail.com",
+    "username": "JohnSmith"
+  }
+}
+```
+
+When there is no logged-in user:
+
+```json
+{
+  "user": null
+}
+```
+
+Log In a User
+Logs in a user with valid credentials.
+
+Require Authentication: false
+Method: POST
+Route Path: /api/session
+Headers:
+
+```json
+{
+  "Content-Type": "application/json"
+}
+```
+
+Request Body:
+
+```json
+{
+  "credential": "john.smith@gmail.com",
+  "password": "secret password"
+}
+```
+
+Successful Response
+
+```json
+{
+  "user": {
+    "id": 1,
+    "firstName": "John",
+    "lastName": "Smith",
+    "email": "john.smith@gmail.com",
+    "username": "JohnSmith"
+  }
+}
+```
+
+Error Responses
+
+Invalid credentials:
+
+```json
+{
+  "message": "Invalid credentials"
+}
+```
+
+Validation errors:
+
+```json
+{
+  "message": "Bad Request",
+  "errors": {
+    "credential": "Email or username is required",
+    "password": "Password is required"
+  }
+}
+```
+
+Sign Up a User
+Creates a new user and logs them in.
+
+Require Authentication: false
+Method: POST
+Route Path: /api/users
+
+Headers:
+
+```json
+{
+  "Content-Type": "application/json"
+}
+```
+
+Request Body:
+
+```json
+{
+  "firstName": "John",
+  "lastName": "Smith",
+  "email": "john.smith@gmail.com",
+  "username": "JohnSmith",
+  "password": "secret password"
+}
+```
+
+Successful Response
+
+```json
+{
+  "user": {
+    "id": 1,
+    "firstName": "John",
+    "lastName": "Smith",
+    "email": "john.smith@gmail.com",
+    "username": "JohnSmith"
+  }
+}
+```
+
+Error Responses
+
+User already exists:
+```json
+{
+  "message": "User already exists",
+  "errors": {
+    "email": "User with that email already exists",
+    "username": "User with that username already exists"
+  }
+}
+```
+
+Validation errors:
+
+```json
+{
+  "message": "Bad Request",
+  "errors": {
+    "email": "Invalid email",
+    "username": "Username is required",
+    "firstName": "First Name is required",
+    "lastName": "Last Name is required"
+  }
+}
+```
+
+Spots
+Get All Spots
+Returns all spots.
+
+Require Authentication: false
+Method: GET
+Route Path: /api/spots
+Request Body: None
+Successful Response
+
+```json
+{
+  "Spots": [
+    {
+      "id": 1,
+      "ownerId": 1,
+      "address": "123 Disney Lane",
+      "city": "San Francisco",
+      "state": "California",
+      "country": "United States of America",
+      "lat": 37.7645358,
+      "lng": -122.4730327,
+      "name": "App Academy",
+      "description": "Place where web developers are created",
+      "price": 123,
+      "createdAt": "2021-11-19 20:39:36",
+      "updatedAt": "2021-11-19 20:39:36",
+      "avgRating": 4.5,
+      "previewImage": "image url"
+    }
+  ]
+}
+```
+
+Create a Spot
+Creates and returns a new spot.
+
+Require Authentication: true
+Method: POST
+Route Path: /api/spots
+Headers:
+
+```json
+{
+  "Content-Type": "application/json"
+}
+```
+
+Request Body:
+
+```json
+{
+  "address": "123 Disney Lane",
+  "city": "San Francisco",
+  "state": "California",
+  "country": "United States of America",
+  "lat": 37.7645358,
+  "lng": -122.4730327,
+  "name": "App Academy",
+  "description": "Place where web developers are created",
+  "price": 123
+}
+```
+
+Successful Response
+
+```json
+{
+  "id": 1,
+  "ownerId": 1,
+  "address": "123 Disney Lane",
+  "city": "San Francisco",
+  "state": "California",
+  "country": "United States of America",
+  "lat": 37.7645358,
+  "lng": -122.4730327,
+  "name": "App Academy",
+  "description": "Place where web developers are created",
+  "price": 123,
+  "createdAt": "2021-11-19 20:39:36",
+  "updatedAt": "2021-11-19 20:39:36"
+}
+```
+
+Error Response
+
+Validation errors:
+
+```json
+{
+  "message": "Bad Request",
+  "errors": {
+    "address": "Street address is required",
+    "city": "City is required",
+    "state": "State is required",
+    "country": "Country is required",
+    "lat": "Latitude must be within -90 and 90",
+    "lng": "Longitude must be within -180 and 180",
+    "name": "Name must be less than 50 characters",
+    "description": "Description is required",
+    "price": "Price per day must be a positive number"
+  }
+}
+```
+
+Get Spot Details by ID
+Returns details of a spot by its ID.
+
+Require Authentication: false
+Method: GET
+Route Path: /api/spots/:spotId
+Request Body: None
+Successful Response
+
+```json
+{
+  "id": 1,
+  "ownerId": 1,
+  "address": "123 Disney Lane",
+  "city": "San Francisco",
+  "state": "California",
+  "country": "United States of America",
+  "lat": 37.7645358,
+  "lng": -122.4730327,
+  "name": "App Academy",
+  "description": "Place where web developers are created",
+  "price": 123,
+  "createdAt": "2021-11-19 20:39:36",
+  "updatedAt": "2021-11-19 20:39:36",
+  "numReviews": 5,
+  "avgStarRating": 4.5,
+  "SpotImages": [
+    {
+      "id": 1,
+      "url": "image url",
+      "preview": true
+    }
+  ],
+  "Owner": {
+    "id": 1,
+    "firstName": "John",
+    "lastName": "Smith"
+  }
+}
+```
+
+Error Response
+
+```json
+{
+  "message": "Spot couldn't be found"
+}
+```
+
+Setup and Installation
+Clone the repository.
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+Set up the database and run migrations:
+
+```bash
+npx dotenv sequelize db:migrate
+```
+
+Seed the database:
+
+```bash
+npx dotenv sequelize db:seed:all
+```
+
+Start the server:
+
+```bash
+npm start
+```
