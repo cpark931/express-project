@@ -1,12 +1,22 @@
+// backend/config/database.js
 const config = require('./index');
 
 module.exports = {
   development: {
     storage: config.dbFile,
-    dialect: "sqlite",
+    ...(process.env.USE_LOCAL_POSTGRESS === 'true' ? {
+      use_env_variable: 'DATABASE_URL',
+      dialect: 'postgres',
+      dialectOptions: {},
+      define: {
+        schema: 'public',
+      }
+    } : {
+      dialect: "sqlite",
+    }),
     seederStorage: "sequelize",
     logQueryParameters: true,
-    typeValidation: true,
+    typeValidation: true
   },
   production: {
     use_env_variable: 'DATABASE_URL',
@@ -15,11 +25,11 @@ module.exports = {
     dialectOptions: {
       ssl: {
         require: true,
-        rejectUnauthorized: false,
-      },
+        rejectUnauthorized: false
+      }
     },
     define: {
-      schema: process.env.SCHEMA,
-    },
-  },
+      schema: process.env.SCHEMA
+    }
+  }
 };
