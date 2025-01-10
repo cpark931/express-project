@@ -1,5 +1,6 @@
 'use strict';
 
+
 let options = {};
 if (process.env.NODE_ENV === 'production') {
   options.schema = process.env.SCHEMA;  // define your schema in options object
@@ -8,39 +9,34 @@ if (process.env.NODE_ENV === 'production') {
 /** @type {import('sequelize-cli').Migration} */
 module.exports = {
   async up(queryInterface, Sequelize) {
-    await queryInterface.createTable('Reviews', {
+    await queryInterface.createTable('Users', {
       id: {
         allowNull: false,
         autoIncrement: true,
         primaryKey: true,
         type: Sequelize.INTEGER
       },
-      userId: {
-        type: Sequelize.INTEGER,
+      username: {
+        type: Sequelize.STRING(30),
         allowNull: false,
-        references: {
-          model: 'Users',
-          key: 'id'
-        },
-        onDelete: 'CASCADE'
+        unique: true
       },
-      spotId: {
-        type: Sequelize.INTEGER,
+      email: {
+        type: Sequelize.STRING(256),
         allowNull: false,
-        references: {
-          model: 'Spots',
-          key: 'id'
-        },
-        onDelete: 'CASCADE'
+        unique: true
       },
-      review: {
-        type: Sequelize.TEXT,
+      firstName: {
+        type: Sequelize.STRING(256),
         allowNull: false
       },
-      stars: {
-        type: Sequelize.INTEGER,
-        allowNull: false,
-        defaultValue: 1
+      lastName: {
+        type: Sequelize.STRING(256),
+        allowNull: false
+      },
+      hashedPassword: {
+        type: Sequelize.STRING.BINARY,
+        allowNull: false
       },
       createdAt: {
         allowNull: false,
@@ -54,7 +50,9 @@ module.exports = {
       }
     }, options);
   },
+
   async down(queryInterface, Sequelize) {
-    await queryInterface.dropTable('Reviews', options);
+    options.tableName = "Users";
+    return queryInterface.dropTable(options);
   }
 };
