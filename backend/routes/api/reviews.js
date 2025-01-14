@@ -1,172 +1,295 @@
-//^ backend/routes/api/reviews.js
-const express = require('express');
-const { requireAuth, checkOwnership } = require('../../utils/auth');
-const { Spot, Image, Review, User } = require('../../db/models');
-const { validateReview } = require('../../utils/validation');
-const { formatDateTime } = require('../api/utils/date-formatter');
+const express = require("express");
+const {
+    Review,
+    Spot,
+    User,
+    ReviewImage,
+    SpotImage,
+    Sequelize,
+} = require("../../db/models");
+const { requireAuth } = require("../../utils/auth.js");
+const { handleValidationErrors } = require("../../utils/validation");
+const { check } = require("express-validator");
+const spotimage = require("../../db/models/spotimage.js");
+const { Op } = require("sequelize");
 
 const router = express.Router();
 
-//~GET REVIEWS FOR CURR USER
-//! require auth
-router.get('/current', requireAuth, async (req, res) => {
-  try {
-    const reviews = await Review.findAll({
-      where: { userId: req.user.id },
-      include: [
-        {
-          model: User,
-          attributes: ['id', 'firstName', 'lastName'],
-        },
-        {
-          model: Spot,
-          attributes: ['id', 'ownerId', 'address', 'city', 'state', 'country', 'lat', 'lng', 'name', 'price'],
-          include: [{
-            model: Image,
-            as: 'Images',
-            attributes: ['url'],
-            limit: 1,
-          }],
-        },
-        {
-          model: Image,
-          as: 'Images',
-          attributes: ['id', 'url'],
-        },
-      ],
-    });
+const validateReview = [
+    check("review")
+        .exists({ checkFalsy: true })
+        .withMessage("Review text is required"),
+    check("stars")
+        .exists({ checkFalsy: true })
+        .isInt({ min: 1, max: 5 })
+        .withMessage("Stars must be an integer from 1 to 5"),
+    handleValidationErrors,
+];
 
-    if (!reviews) return res.status(404).json({ error: `No reviews found for spot ${spotId} `});
+// 1. Get all Reviews of the Current User
+//removed review from front of route
+//Server error
+router.get("/current", requireAuth, async (req, res) => {
+    try {
+        const reviews = await Review.findAll({
+            where: { userId: req.user.id },
+            include: [
+                {
+                    model: Spot,
+                    attributes: {
+                        include: [
+                            [
+                                Sequelize.literal(`(SELECT "url" FROM "SpotImages" as image
+                        WHERE image.preview = true LIMIT 1)`),
+                                "previewImage",
+                            ],
+                        ],
+                    },
+                },
+                {
+                    model: User,
+                    attributes: ["id", "firstName", "lastName"],
+                },
+                {
+                    model: ReviewImage,
+                    as: "ReviewImages",
+                    attributes: ["id", "url"],
+                },
+            ],
+        });
 
-    const responseData = reviews.map( review => {
-      const { User, Spot, Images, createdAt, updatedAt, ...reviewData } = review.get();
-      const reviewImages = review.Images ? review.Images.map( image => ({
-        id: image.id,
-        url: image.url
-      })) : [];
-
-      return {
-        ...reviewData,
-        createdAt: formatDateTime(createdAt),
-        updatedAt: formatDateTime(updatedAt),
-        User: {
-          id: User.id,
-          firstName: User.firstName,
-          lastName: User.lastName
-        },
-        Spot: {
-          id: Spot.id,
-          ownerId: Spot.ownerId,
-          address: Spot.address,
-          city: Spot.city,
-          state: Spot.state,
-          country: Spot.country,
-          lat: Spot.lat,
-          lng: Spot.lng,
-          name: Spot.name,
-          price: Spot.price,
-          previewImage: Spot.Images.length ? Spot.Images[0].url : null
-        },
-        ReviewImages: reviewImages
-      };
-    });
-
-    res.json({ Reviews: responseData });
-  } catch (error) {
-    console.error('Error fetching reviews:', error);
-    return res.status(500).json({ error: 'Internal Server Error' });
-  };
+        res.status(200).json({ Reviews: reviews });
+    } catch (err) {
+        console.log(err);
+        res.status(500).json({ message: "Server error" });
+    }
 });
 
-//~EDIT A REVIEW
-//! require auth and own
-router.put('/:reviewId', requireAuth, checkOwnership(Review, 'reviewId', 'userId'), validateReview,
-async (req, res) => {
-  try {
-    const review = await Review.findByPk(req.params.reviewId);
-    if (!review) return res.status(404).json({ message: `review coudn't be found` });
 
-    review.set({
-        ...req.body
-    });
+// 2. Get all Reviews by a Spot's id
+// resource not found
+//MOVED THIS ROUTE TO SPOTS TO FIX ISSUE
+// router.get("/spots/:spotId/reviews", async (req, res) => {
+//     const { spotId } = req.params;
 
-    review.save({ validate: true });
+//     try {
+//         const spot = await Spot.findByPk(spotId);
+//         if (!spot) {
+//             return res.status(404).json({ message: "Spot couldn't be found" });
+//         }
 
-    const reviewObj = review.get();
-    reviewObj.createdAt = formatDateTime(reviewObj.createdAt);
-    reviewObj.updatedAt = formatDateTime(reviewObj.updatedAt);
+//         const reviews = await Review.findAll({
+//             where: { spotId },
+//             include: [
+//                 {
+//                     model: User,
+//                     attributes: ["id", "firstName", "lastName"],
+//                 },
+//                 {
+//                     model: ReviewImage,
+//                     attributes: ["id", "url"],
+//                 },
+//             ],
+//         });
 
-    res.json(reviewObj);
-  } catch (error) {
-    console.error('Error deleteing review:', error);
-    return res.status(500).json({ error: 'Internal Server Error' });
-  };
-});
+//         res.status(200).json({ Reviews: reviews });
+//     } catch (err) {
+//         res.status(500).json({ message: "Server error" });
+//     }
+// });
 
-//~DELETE A REVIEW
-//! requires auth and ownership
-router.delete('/:reviewId', requireAuth, checkOwnership(Review, 'reviewId', 'userId'),
-async (req, res) => {
-  try {
-    const review = await Review.findByPk(req.params.reviewId, {
-      include: {
-        model: Image,
-        as: 'Images'
-      }
-    });
+// 3. Create a Review for a Spot based on the Spot's id
+//MOVED TO SPOTS ROUTES TO MAKE IT WORK
+// router.post(
+//     "/spots/:spotId/reviews",
+//     requireAuth,
+//     validateReview,
+//     async (req, res) => {
+//         const { spotId } = req.params;
+//         const { review, stars } = req.body;
 
-    if (!review) return res.status(404).json({ message: `Review coudn't be found` });
+//         try {
+//             const spot = await Spot.findByPk(spotId);
+//             if (!spot) {
+//                 return res
+//                     .status(404)
+//                     .json({ message: "Spot couldn't be found" });
+//             }
 
-    for (const image of review.Images) {
-      image.destroy();
-    };
+//             const existingReview = await Review.findOne({
+//                 where: {
+//                     userId: req.user.id,
+//                     spotId,
+//                 },
+//             });
 
-    review.destroy();
+//             if (existingReview) {
+//                 return res.status(500).json({
+//                     message: "User already has a review for this spot",
+//                 });
+//             }
 
-    res.json({ message: 'Successfully deleted' });
-  } catch (error) {
-    console.error('Error deleteing review:', error);
-    return res.status(500).json({ error: 'Internal Server Error' });
-  };
-});
+//             if (!review || !stars || stars < 1 || stars > 5) {
+//                 return res.status(400).json({
+//                     message: "Bad Request",
+//                     errors: {
+//                         review: "Review text is required",
+//                         stars: "Stars must be an integer from 1 to 5",
+//                     },
+//                 });
+//             }
 
-//~ADD IMAGE TO REVIEW
-//! requires auth and review ownership
-router.post('/:reviewId/images', requireAuth, checkOwnership(Review, 'reviewId', 'userId'),
-async (req, res) => {
-  try {
-    const imageData = req.body;
-    const reviewId  = req.params.reviewId;
-    const review = await Review.findByPk(reviewId);
-    if (!review) return res.status(404).json({ message: "Review couldn't be found" });
-    //^ count image records for spot
-    const imageCount = await Image.count({ where: { imageableId: reviewId, imageableType: 'review' }});
+//             const newReview = await Review.create({
+//                 userId: req.user.id,
+//                 spotId,
+//                 review,
+//                 stars,
+//             });
 
-    if (imageCount >= 10) {
-        return res.status(403).json(
-            {
-                message: 'Maximum number of images for this resouce was reached'
+//             res.status(201).json(newReview);
+//         } catch (err) {
+//             res.status(500).json({ message: "Failed to create review" });
+//         }
+//     }
+// );
+
+// 4. Add an Image to a Review based on the Review's id
+//I removed the first part of the route, reviews,
+//need to be able to create a review as the logged in user to test this
+router.post("/:reviewId/images", requireAuth, async (req, res) => {
+    const { reviewId } = req.params;
+    const { url } = req.body;
+
+    try {
+        const review = await Review.findByPk(reviewId);
+        if (!review) {
+            return res
+                .status(404)
+                .json({ message: "Review couldn't be found" });
+        }
+
+        if (review.userId !== req.user.id) {
+            return res.status(403).json({ message: "Forbidden" });
+        }
+
+        const imageCount = await ReviewImage.count({ where: { reviewId } });
+        if (imageCount >= 10) {
+            return res.status(403).json({
+                message:
+                    "Maximum number of images for this resource was reached",
             });
-    };
+        }
 
-    const newImage = await Image.create({
-        ...imageData,
-        imageableId: reviewId,
-        imageableType: 'review',
-    }, { validate: true });
+        const newImage = await ReviewImage.create({
+            reviewId,
+            url,
+        });
 
-    const imageObj = newImage.get();
-    delete imageObj.preview;
-    delete imageObj.imageableId;
-    delete imageObj.imageableType;
-    delete imageObj.createdAt;
-    delete imageObj.updatedAt;
-
-    res.status(201).json(imageObj);
-  } catch (error) {
-    console.error('Error creating image:', error);
-    return res.status(500).json({ error: 'Internal Server Error' });
-  };
+        res.status(201).json(newImage);
+    } catch (err) {
+        res.status(500).json({ message: "Failed to add image" });
+    }
 });
+
+// 5. Edit a Review
+//removed review from route as test
+router.put("/:reviewId", requireAuth, async (req, res) => {
+    const { reviewId } = req.params;
+    const { review, stars } = req.body;
+
+    try {
+        const existingReview = await Review.findByPk(reviewId);
+        if (!existingReview) {
+            return res
+                .status(404)
+                .json({ message: "Review couldn't be found" });
+        }
+
+        if (existingReview.userId !== req.user.id) {
+            return res.status(403).json({ message: "Forbidden" });
+        }
+
+        if (!review || !stars || stars < 1 || stars > 5) {
+            return res.status(400).json({
+                message: "Bad Request",
+                errors: {
+                    review: "Review text is required",
+                    stars: "Stars must be an integer from 1 to 5",
+                },
+            });
+        }
+
+        existingReview.review = review;
+        existingReview.stars = stars;
+        await existingReview.save();
+
+        res.status(200).json(existingReview);
+    } catch (err) {
+        res.status(500).json({ message: "Failed to update the review" });
+    }
+});
+
+// 6. Delete a Review
+//same test remove review from front of route
+router.delete("/:reviewId", requireAuth, async (req, res) => {
+    const { reviewId } = req.params;
+
+    try {
+        const review = await Review.findByPk(reviewId);
+        if (!review) {
+            return res
+                .status(404)
+                .json({ message: "Review couldn't be found" });
+        }
+
+        if (review.userId !== req.user.id) {
+            return res.status(403).json({ message: "Forbidden" });
+        }
+
+        await review.destroy();
+        res.status(200).json({ message: "Successfully deleted" });
+    } catch (err) {
+        res.status(500).json({ message: "Failed to delete the review" });
+    }
+});
+
+// //Delete a Review Image
+// router.delete(
+//     "/review-images/:imageId",
+//     requireAuth,
+//     async (req, res, next) => {
+//         const { imageId } = req.params;
+
+//         try {
+//             const reviewImage = await ReviewImage.findByPk(imageId, {
+//                 include: {
+//                     model: Review,
+//                     attributes: ["userId"],
+//                 },
+//             });
+
+//             if (!reviewImage) {
+//                 return res.status(404).json({
+//                     message: "Review Image couldn't be found",
+//                 });
+//             }
+
+//             if (reviewImage.Review.userId !== req.user.id) {
+//                 return res.status(403).json({
+//                     message:
+//                         "You are not authorized to delete this review image",
+//                 });
+//             }
+
+//             await reviewImage.destroy();
+
+//             return res.status(200).json({
+//                 message: "Successfully deleted",
+//             });
+//         } catch (error) {
+//             next(error);
+//         }
+//     }
+// );
 
 module.exports = router;

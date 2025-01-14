@@ -1,44 +1,91 @@
-//^ backend/routes/api/users.js
+// backend/routes/api/users.js
 const express = require('express');
 const bcrypt = require('bcryptjs');
-const { setTokenCookie } = require('../../utils/auth');
+const { check } = require('express-validator');
+const { handleValidationErrors } = require('../../utils/validation');
+
+const { setTokenCookie, requireAuth } = require('../../utils/auth');
 const { User } = require('../../db/models');
-const { validateSignup } = require('../../utils/validation');
+const { Op } = require('sequelize')
 
 const router = express.Router();
 
-//~ Sign up
+const validateSignup = [
+    check('email')
+      .exists({ checkFalsy: true })
+      .isEmail()
+      .withMessage('Invalid email'),
+    check('username')
+      .exists({ checkFalsy: true })
+      .isLength({ min: 4 })
+      .withMessage('Username is required'),
+    check('username')
+      .not()
+      .isEmail()
+      .withMessage('Username cannot be an email.'),
+    check('firstName')
+      .exists({ checkFalsy: true })
+      .withMessage('First Name is required'),
+    check('lastName')
+      .exists({ checkFalsy: true })
+      .withMessage('Last Name is required'),
+    // check('password')
+    //   .exists({ checkFalsy: true })
+    //   .isLength({ min: 6 })
+    //   .withMessage('Password must be 6 characters or more.'),
+    handleValidationErrors
+  ];
+
+// Sign up
 router.post(
-  '/',
-  validateSignup,
-  async (req, res) => {
-    const { firstName, lastName, email, password, username } = req.body;
-    const hashedPassword = bcrypt.hashSync(password);
+    '/',
+    validateSignup,
+    async (req, res) => {
+      const { email, password, username, firstName, lastName } = req.body;
 
-    //^ error handeling for dupes
-    const dupeEmailCheck = await User.findOne({ where: { email: email }});
-    const dupeUsernameCheck = await User.findOne({ where: { username: username }});
-    const errors = {};
-    if (dupeEmailCheck) errors.email = 'User with that email already exists';
-    if (dupeUsernameCheck) errors.username = 'User with that usnername already exists'
-    if (Object.keys(errors). length > 0) return res.status(500).json({ message: 'User already exists', errors })
+      const emailUser = await User.findOne({
+        where: { email }
+      });
 
-    const user = await User.create({ firstName, lastName, email, username, hashedPassword });
+      const usernameUser = await User.findOne({
+        where: { username }
+      });
 
-    const safeUser = {
-      id: user.id,
-      firstName: user.firstName,
-      lastName: user.lastName,
-      email: user.email,
-      username: user.username,
-    };
+      const errors = {};
 
-    await setTokenCookie(res, safeUser);
+      if (emailUser) {
+        errors.email = "User with that email already exists";
+      }
 
-    return res.json({
-      user: safeUser
-    });
-  }
-);
+      if (usernameUser) {
+        errors.username = 'User with that username already exists';
+      }
+
+      if (emailUser || usernameUser) {
+        return res.status(500).json({
+          message: 'User already exists',
+          errors
+        });
+      }
+
+
+      const hashedPassword = bcrypt.hashSync(password);
+      const user = await User.create({ email, username, hashedPassword, firstName, lastName });
+
+      const safeUser = {
+        id: user.id,
+        firstName: user.firstName,
+        lastName: user.lastName,
+        email: user.email,
+        username: user.username,
+      };
+
+      await setTokenCookie(res, safeUser);
+
+      return res.status(201).json({
+        user: safeUser
+      });
+    }
+  );
 
 module.exports = router;
